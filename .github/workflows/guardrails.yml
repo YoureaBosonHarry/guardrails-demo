@@ -27,7 +27,7 @@ jobs:
 
       # 1) run Rego unit tests
       - name: 🧪  OPA unit tests
-        run: opa test "${POLICY_DIR}/..."
+        run: opa test "${POLICY_DIR}/"
 
       # 2) find Kubernetes/Terraform files changed in the PR and scan them
       - name: 🔍  Conftest scan of changed manifests
