@@ -1,0 +1,2 @@
+policy = "policy"
+namespace = "k8s.guardrails"

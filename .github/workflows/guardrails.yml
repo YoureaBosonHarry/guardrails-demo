@@ -1,0 +1,61 @@
+# .github/workflows/guardrails.yml
+# Runs every time you push to a branch *or* open/refresh a Pull Request.
+name: guardrails
+
+on:
+  pull_request:
+  push:                         # let you test on main, too
+    branches: [ main ]
+
+env:
+  # Directory that contains the "kubernetes" folder with your .rego files
+  POLICY_DIR: policy            # <-- change if you used a different path
+
+jobs:
+  policy-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: ☁️  Check out code
+        uses: actions/checkout@v4
+
+      # Installs *both* OPA and Conftest at pinned versions
+      - name: 🔧  Install OPA + Conftest
+        uses: open-policy-agent/setup-opa@v2
+        with:
+          version: "0.64.1"       # keep in sync with your laptop
+          conftest: "0.46.0"
+
+      # 1) run Rego unit tests
+      - name: 🧪  OPA unit tests
+        run: opa test "${POLICY_DIR}/..."
+
+      # 2) find Kubernetes/Terraform files changed in the PR and scan them
+      - name: 🔍  Conftest scan of changed manifests
+        run: |
+          FILES=$(git diff --name-only \
+                     ${{ github.event.before }} ${{ github.sha }} | \
+                   grep -E '\.(ya?ml|json|tf)$' || true)
+
+          if [[ -z "$FILES" ]]; then
+            echo "No policy‑relevant files modified."
+            exit 0
+          fi
+
+          # Fail the job if any deny rule triggers
+          conftest test --policy-type kubernetes "${FILES}"
+
+      # Optional – surface results in PR Checks tab as a JUnit report
+      - name: 📄  Archive JUnit report
+        if: always()
+        run: |
+          mkdir -p reports
+          conftest test \
+            --policy-type kubernetes \
+            --output junit "${FILES}" > reports/conftest.xml || true
+        continue-on-error: true
+        # Upload as an artifact so you can click into it
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: conftest-report
+          path: reports/conftest.xml
